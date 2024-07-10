@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Comment Sentiment Analysis</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #004b81;
+            --secondary-color: #ab0058;
+            --background-color: #f0c4c4;
+            --text-color: #000000;
+            --border-color: #000000;
+        }
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            line-height: 1.6;
+        }
+
+        h1, h2 {
+            color: var(--primary-color);
+        }
+
+        #result {
+            margin-top: 30px;
+            display: flex;
+            gap: 30px;
+            flex-wrap: wrap;
+        }
+
+        #commentsList {
+            flex: 1;
+            min-width: 300px;
+            max-height: 600px;
+            overflow-y: auto;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+        }
+
+        #chartArea {
+            flex: 1;
+            min-width: 300px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+        }
+
+        .loader {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid var(--primary-color);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        form {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            max-width: 500px;
+            margin: 0 auto 30px;
+        }
+
+        input, button {
+            padding: 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            font-size: 16px;
+        }
+
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover {
+            background-color: #2980b9;
+        }
+
+        .comment {
+            margin-bottom: 15px;
+            padding: 15px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            transition: transform 0.2s ease;
+        }
+
+        .comment:hover {
+            transform: translateY(-2px);
+        }
+
+        .positive { background-color: rgba(46, 204, 113, 0.1); }
+        .neutral { background-color: rgba(241, 196, 15, 0.1); }
+        .negative { background-color: rgba(231, 76, 60, 0.1); }
+
+        .sentiment-label {
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: var(--secondary-color);
+        }
+
+        #percentages {
+            margin-top: 20px;
+        }
+
+        @media (max-width: 768px) {
+            #result {
+                flex-direction: column;
+            }
+        }
+
+
+        .input-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .input-group input {
+            flex: 1;
+        }
+
+        .input-help {
+            font-size: 14px;
+            color: #666;
+            white-space: nowrap;
+        }
+
+        @media (max-width: 600px) {
+            .input-group {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .input-help {
+                margin-top: 5px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>YouTube Comment Sentiment Analysis</h1>
+    <p class="description">
+        Analyze the sentiment of YouTube video comments with ease. Simply enter a YouTube video URL and specify the number of comments to analyze. Our tool will fetch the comments, perform sentiment analysis, and provide you with insights into the overall sentiment of the video's audience. Discover whether the comments are predominantly positive, neutral, or negative, and view individual comment sentiments.
+    </p>
+    <form id="analyzeForm">
+        <div class="input-group">
+            <input type="text" id="videoUrl" placeholder="Enter YouTube Video URL" required>
+            <span class="input-help">Enter a Youtube url link</span>
+        </div>
+        <div class="input-group">
+            <input type="number" id="commentCount" placeholder="Number of comments to analyze" min="1" max="1000" value="100">
+            <span class="input-help">Enter the number of comments to analyze(100 to 1000)</span>
+        </div>
+        <button type="submit">Analyze</button>
+    </form>
+    <div id="loader" class="loader" style="display: none;"></div>
+    <div id="result" style="display: none;">
+        <div id="commentsList"></div>
+        <div id="chartArea">
+            <canvas id="sentimentChart"></canvas>
+            <div id="percentages"></div>
+        </div>
+    </div>
+
+    <script>
+        // The JavaScript remains unchanged
+        let chart = null;
+
+        document.getElementById('analyzeForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const videoUrl = document.getElementById('videoUrl').value;
+            const commentCount = document.getElementById('commentCount').value;
+            console.log("Sending URL:", videoUrl);
+            console.log("Comment count:", commentCount);
+            
+            document.getElementById('loader').style.display = 'block';
+            document.getElementById('result').style.display = 'none';
+            
+            try {
+                const response = await fetch('/analyze', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ 
+                        video_url: videoUrl,
+                        max_comments: parseInt(commentCount)
+                    }),
+                });
+                const data = await response.json();
+                if (data.error) {
+                    console.error("Error:", data.error);
+                    alert(`Error: ${data.error}`);
+                } else {
+                    displayResults(data);
+                }
+            } catch (error) {
+                console.error("Fetch error:", error);
+                alert('An error occurred while analyzing.');
+            } finally {
+                document.getElementById('loader').style.display = 'none';
+            }
+        });
+
+        function displayResults(data) {
+            document.getElementById('result').style.display = 'flex';
+            
+            const commentsListDiv = document.getElementById('commentsList');
+            commentsListDiv.innerHTML = '<h2>Some Analyzed Comments</h2>';
+            data.comments.forEach(comment => {
+                const commentDiv = document.createElement('div');
+                commentDiv.className = `comment ${comment.sentiment}`;
+                const sentimentLabel = document.createElement('div');
+                sentimentLabel.className = 'sentiment-label';
+                sentimentLabel.textContent = comment.sentiment.charAt(0).toUpperCase() + comment.sentiment.slice(1);
+                commentDiv.appendChild(sentimentLabel);
+                const commentText = document.createElement('div');
+                commentText.textContent = comment.text;
+                commentDiv.appendChild(commentText);
+                commentsListDiv.appendChild(commentDiv);
+            });
+
+            const ctx = document.getElementById('sentimentChart').getContext('2d');
+            
+            if (chart) {
+                chart.destroy();
+            }
+            
+            chart = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: ['Positive', 'Neutral', 'Negative'],
+                    datasets: [{
+                        data: [data.positive, data.neutral, data.negative],
+                        backgroundColor: ['#2ecc71', '#f1c40f', '#e74c3c']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Comment Sentiment Analysis'
+                        }
+                    }
+                }
+            });
+
+            const percentagesDiv = document.getElementById('percentages');
+            percentagesDiv.innerHTML = `
+                <h2>Analysis Results</h2>
+                <p>Positive: ${data.positive.toFixed(2)}%</p>
+                <p>Neutral: ${data.neutral.toFixed(2)}%</p>
+                <p>Negative: ${data.negative.toFixed(2)}%</p>
+                <p>Total Comments Analyzed: ${data.total_comments}</p>
+            `;
+        }
+    </script>
+</body>
+</html>
